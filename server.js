@@ -12,111 +12,37 @@ const knex = require('knex')({
   }
 });
 
+const register = require('./controllers/register')
+const signin = require('./controllers/signin')
+const profile = require('./controllers/profile')
+const image = require('./controllers/image')
+
 const app = express();
 
 app.use(bodyParser.json());
 app.use(cors())
 
 
-//As soon we access localhost, it will retrieve to us the 'database.users'
+
 app.get("/", (req, res) => {
   res.json('This is my world')
 });
 
-//To submit email & password and check if exists in the database
-app.post("/signin", (req, res) => {
-  knex.select('email', 'hash').from('login')
-    .where('email', '=', req.body.email)
-    .then(data => {
-      const isValid = bcrypt.compareSync(req.body.password, data[0].hash)
-      if (isValid) {
-        return knex.select('*').from('users')
-        .where('email', '=', req.body.email)
-        .then(user => {
-          res.json(user[0])
-        })
-        .catch(err => res.status(400).json('unable to get user'))
-      } else {
-        res.status(400).json('Wrong Credentials')
-      }
-    })
-    .catch(err => res.status(400).json('Wrong Credentials'))
-});
+//IMPORTANT: Bellow with signin and also inside of signin.js is written in a different
+//way, to have the code in a cleaner way. Just to Compare and understand! 
+app.post("/signin", signin.handleSignin(knex, bcrypt));
 
-//To register a new user in db, by getting name, email & password
-app.post("/register", (req, res) => {
-  const { email, name, password } = req.body;
-  const hash = bcrypt.hashSync(password);
-    knex.transaction(trx => {
-      trx.insert({
-        hash: hash,
-        email: email
-      })
-      .into('login')
-      .returning('email')
-      .then(loginEmail => {
-        return trx('users')
-          .returning('*')
-          .insert({
-            email: loginEmail[0],
-            name: name,
-            joined: new Date()
-      }).then(user => {
-        res.json(user[0]); 
-      })
-      })
-      .then(trx.commit)
-      .catch(trx.rollback)
-    })
-      .catch(err => res.status(400).json('Unable to Register'))
-});
+app.post("/register", (req, res) => { register.handleRegister(req, res, knex, bcrypt) });
+ 
+app.get("/profile/:id", (req, res) => { profile.handleProfile(req, res, knex)});
 
+app.put("/image", (req, res) => { image.handleImage(req, res, knex) });
 
-//it will get from the url 'localhost:3000/profile/124' 
-// and it will check if 124 belongs to an user or not, for example. 
-app.get("/profile/:id", (req, res) => {
-  const { id } = req.params;
-  knex.select('*').from('users').where({
-    id: id
-  }).then(user => {
-    if (user.length) {
-      res.json(user[0])
-    } else {
-      res.status(400).json('Not Found')
-    }
-  }).catch(err => res.status(400).json('Error Getting User'))
-});
-
-
-//If we do a PUT request for the id:124, for example, it will increase the entries++
-app.put("/image", (req, res) => {
-  const { id } = req.body;
-  knex('users').where('id', '=', id)
-    .increment('entries', 1)
-    .returning('entries')
-    .then(entries => {
-      res.json(entries[0])
-    }).catch(err => res.status(400).json('unable to get entries'))
-});
-
-
-
-
-
+// This is to handle the API
+app.post("/imageurl", (req, res) => { image.handleApiCall(req, res) });
 
 
 app.listen(3000, () => {
   console.log("app is running on port 3000");
 });
 
-/*
-
--> res = this is working
-
-/signin --> POST = success/fail
-/register --> POST = user
-/profile/:userId --> GET = user
-/image --> PUT --> user
-
-
-*/
